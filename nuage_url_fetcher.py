@@ -16,14 +16,19 @@ from docopt import docopt
 from vspk import v5_0 as vsdk
 import time
 import json
+import sys
 from proton.handlers import MessagingHandler,EndpointStateHandler
 from proton.reactor import Container, DurableSubscription
 from optparse import OptionParser
 import threading
 
-def ampqWorker():
+username = "csproot"
+password = "csproot"
+login_enterprise = "csp"
+
+def ampqWorker(username, password, login_enterprise, vsd_ip):
     """thread worker function"""
-    oAmqpClient = AmqpClient()
+    oAmqpClient = AmqpClient(username, password, login_enterprise, vsd_ip)
     Container(Recv(oAmqpClient), EndPointHandler()).run()
     return
 
@@ -34,24 +39,60 @@ def execute():
     main(getargs())
 
 def main(args):
-    api_url = "https://"+str(args['--vsd'])+":8443"
+    vsd_ip = str(args['--vsd'])
+    api_url = "https://"+vsd_ip+":8443"
     try:
-        session = vsdk.NUVSDSession(username='csproot', password='csproot', enterprise='csp', api_url=api_url)
+        session = vsdk.NUVSDSession(username=username, password=password, enterprise=login_enterprise, api_url=api_url)
         session.start()
         csproot = session.user
     except:
         print("ERROR: Could not establish connection to VSD API")
         sys.exit(1)
 
-    enterprise_filter_str = 'name == "'+str(args['--enterprise'])+'"'
+    enterprise_name = str(args['--enterprise'])
+    enterprise_filter_str = 'name == "'+enterprise_name+'"'
     enterprise = csproot.enterprises.get_first(filter=enterprise_filter_str)
 
-    t = threading.Thread(target=ampqWorker)
-    t.start()
-    time.sleep(1)
+    if enterprise == None:
+      print("ERROR: Could not find enterprise with name "+enterprise_name)
+      sys.exit(1)
+
     #Get NSG object based on Name
-    nsg_filter_str = 'name == "'+str(args['--nsg-name'])+'"'
+    nsg_name = str(args['--nsg-name'])
+    nsg_filter_str = 'name == "'+nsg_name+'"'
     nsg = enterprise.ns_gateways.get_first(filter=nsg_filter_str)
+
+    if nsg == None:
+      print("ERROR: Could not find NSG with name "+nsg_name)
+      sys.exit(1)
+
+    if nsg.bootstrap_status == "ACTIVE" or nsg.bootstrap_status == "CERTIFICATE_SIGNED":
+      print("ERROR: NSG is already in a state where a URL can't be extracted")
+      sys.exit(1)
+      
+    bootstraps = nsg.bootstraps.get()
+    bootstrap = bootstraps[0]
+    
+    if bootstrap.installer_id == None:
+      #print("Installer ID not defined ")
+      existing_user = enterprise.users.get_first(filter="dummy")
+      #print(str(existing_user.to_dict()))
+      if existing_user == None:
+        new_user = vsdk.NUUser(email="dummy@dummy.com",first_name="dummy",last_name="dummy",user_name="dummy",password="Alcateldc",mobileNumber="+32444444444")
+        enterprise.create_child(new_user)
+        bootstrap.installer_id = new_user.id
+        bootstrap.save()
+      else:
+        bootstrap.installer_id = existing_user.id
+        bootstrap.save()
+
+    #Starting the AMQP Client to capture the event
+    t = threading.Thread(target=ampqWorker, args=(username, password, login_enterprise, vsd_ip,))
+    t.start()
+    
+    #Sleep 1s before triggering the NOTIFY event
+    time.sleep(1)
+
     #Create job object to trigger notify_nsg_registration
     job = vsdk.NUJob(command="NOTIFY_NSG_REGISTRATION")
     #Trigger Job on NSG object
@@ -59,12 +100,12 @@ def main(args):
     
 
 class AmqpClient():
-    def __init__(self):
+    def __init__(self,username, password, login_enterprise, vsd_ip):
         #Initialize Defaults
         self.bClusterMode = False
         self.bDurableSubscription = False
-        self.sUserName = "jmsclient%40csp"
-        self.sPassword = "jmsclient"
+        self.sUserName = username+"%40"+login_enterprise
+        self.sPassword = password
         self.sClientId = "Amqp Client"
         self.sTopicName = "topic://topic/CNAMessages"
         self.sQueueName = "queue://queue/CNAQueue"
@@ -72,7 +113,7 @@ class AmqpClient():
 
         self.sPort = "5672"
         self.lUrls = []
-        self.lUrls.append('jmsclient%40csp:jmsclient@10.167.1.60:5672')
+        self.lUrls.append(self.sUserName+":"+self.sPassword+"@"+vsd_ip+":"+self.sPort)
 
 class Recv(MessagingHandler):
     def __init__(self, aInOAmqpClient):
@@ -93,7 +134,6 @@ class Recv(MessagingHandler):
                 event.container.create_receiver(conn, self.oAmqpClient.sQueueName, options=durable)
         else:
             event.container.create_receiver(conn, self.oAmqpClient.sTopicName)
-        #self.oAmqpClient.nsg.create_child(self.oAmqpClient.job)
 
     def on_message(self, event):
         urlFound = False
