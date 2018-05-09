@@ -22,8 +22,8 @@ from proton.reactor import Container, DurableSubscription
 from optparse import OptionParser
 import threading
 
-username = "csproot"
-password = "csproot"
+username = "jmsclient"
+password = "jmsclient"
 login_enterprise = "csp"
 
 def ampqWorker(username, password, login_enterprise, vsd_ip):
@@ -69,7 +69,7 @@ def main(args):
     if nsg.bootstrap_status == "ACTIVE" or nsg.bootstrap_status == "CERTIFICATE_SIGNED":
       print("ERROR: NSG is already in a state where a URL can't be extracted")
       sys.exit(1)
-      
+
     bootstraps = nsg.bootstraps.get()
     bootstrap = bootstraps[0]
     

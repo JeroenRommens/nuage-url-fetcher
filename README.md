@@ -20,6 +20,6 @@ This script can be run from any host as long as the following prerequesites are 
 
 The login used to access the VSD can be changed in at the top of the script by editing the following fields:
 
-	username = "csproot"
-	password = "csproot"
+	username = "jmsclient"
+	password = "jmsclient"
 	login_enterprise = "csp"
