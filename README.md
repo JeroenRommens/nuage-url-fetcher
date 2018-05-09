@@ -19,6 +19,7 @@ This script can be run from any host as long as the following prerequesites are 
 	python nuage_url_fetcher.py --vsd "10.167.1.60" --enterprise "vns0" --nsg-name "nsg-522-001"
 
 The login used to access the VSD can be changed in at the top of the script by editing the following fields:
+
 	username = "csproot"
 	password = "csproot"
 	login_enterprise = "csp"
