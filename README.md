@@ -14,6 +14,9 @@ This script can be run from any host as long as the following prerequesites are 
 1. Install QPID Proton for Python (You can install with "pip install python-qpid-proton")
 1. There is IP connectivity between the host that will run the script and the VSD for ports 8443 and 5672
 
+Install necessary dependencies using 
+	pip install -r requirements.txt
+
 ## Running the script
 
 	python nuage_url_fetcher.py --vsd "10.167.1.60" --enterprise "vns0" --nsg-name "nsg-522-001"
